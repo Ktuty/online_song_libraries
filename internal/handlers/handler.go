@@ -11,11 +11,12 @@ import (
 type Handler struct {
 	services *services.Service
 	router   *mux.Router
+	url      string
 }
 
 // Функция для создания нового обработчика с заданными сервисами
-func NewHandler(services *services.Service) *Handler {
-	return &Handler{services: services}
+func NewHandler(services *services.Service, external_api string) *Handler {
+	return &Handler{services: services, url: external_api}
 }
 
 // Функция для инициализации маршрутов

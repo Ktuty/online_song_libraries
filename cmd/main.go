@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	_ "github.com/Ktuty/docs"
@@ -17,27 +18,29 @@ import (
 	_ "github.com/swaggo/http-swagger"
 )
 
-//	@title			Swagger Example API
+//	@title			Online Songs-lib
 //	@version		1.0
-//	@description	This is a sample server Petstore server.
+//	@description	This is a sample server Online Songs-lib server.
 //	@termsOfService	http://swagger.io/terms/
 
-//	@contact.name	API Support
-//	@contact.url	http://www.swagger.io/support
-//	@contact.email	support@swagger.io
-
-//	@license.name	Apache 2.0
-//	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
-
-//	@host		localhost:8080
-//	@BasePath	/api/v1
+//	@host	localhost:8080
 
 func main() {
-	logrus.SetFormatter(new(logrus.JSONFormatter))
-
+	// Загрузка переменных окружения из файла .env
 	if err := godotenv.Load(); err != nil {
 		logrus.Fatalf("error loading env variables: %s", err.Error())
 	}
+
+	// Установка уровня логирования из переменной окружения
+	logLevel := os.Getenv("LOG_LEVEL")
+	level, err := logrus.ParseLevel(strings.ToLower(logLevel))
+	if err != nil {
+		logrus.Fatalf("error parsing log level: %s", err.Error())
+	}
+	logrus.SetLevel(level)
+
+	// Установка формата логирования
+	logrus.SetFormatter(&logrus.JSONFormatter{})
 
 	db, err := repository.NewPostgres(repository.Config{
 		Host:     os.Getenv("DB_HOST"),
@@ -53,7 +56,7 @@ func main() {
 
 	repo := repository.NewRepository(db)
 	service := services.NewService(repo)
-	handler := handlers.NewHandler(service)
+	handler := handlers.NewHandler(service, os.Getenv("URL"))
 
 	srv := new(server.Server)
 	go func() {

@@ -11,18 +11,11 @@ const docTemplate = `{
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
         "termsOfService": "http://swagger.io/terms/",
-        "contact": {
-            "name": "API Support",
-            "url": "http://www.swagger.io/support",
-            "email": "support@swagger.io"
-        },
-        "license": {
-            "name": "Apache 2.0",
-            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
-        },
+        "contact": {},
         "version": "{{.Version}}"
     },
     "host": "{{.Host}}",
+    "basePath": "{{.BasePath}}",
     "paths": {
         "/songs": {
             "get": {
@@ -90,16 +83,22 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.Songs"
                         }
                     },
-					"400": {
-          				"description": "Bad request"
-					},
-        			"500": {
-          				"description": "Internal server error"
-					}
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
                 }
             },
             "post": {
-                "description": "Create a new song",
+                "description": "Create a new song by sending a request to an external API and then saving the song details.",
                 "consumes": [
                     "application/json"
                 ],
@@ -125,12 +124,18 @@ const docTemplate = `{
                     "201": {
                         "description": "Created"
                     },
-					"400": {
-          				"description": "Bad request"
-					},
-        			"500": {
-          				"description": "Internal server error"
-					}
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
                 }
             }
         },
@@ -168,13 +173,19 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.Songs"
-                        },
-					"400": {
-          				"description": "Bad request"
-						},
-        			"500": {
-          				"description": "Internal server error"
-						}
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
                     }
                 }
             },
@@ -203,12 +214,18 @@ const docTemplate = `{
                     "200": {
                         "description": "OK"
                     },
-					"400": {
-          				"description": "Bad request"
-					},
-        			"500": {
-          				"description": "Internal server error"
-					}
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
                 }
             },
             "patch": {
@@ -245,17 +262,34 @@ const docTemplate = `{
                     "200": {
                         "description": "OK"
                     },
-					"400": {
-          				"description": "Bad request"
-					},
-        			"500": {
-          				"description": "Internal server error"
-					}
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
                 }
             }
         }
     },
     "definitions": {
+        "models.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Songs": {
             "type": "object",
             "properties": {
@@ -286,10 +320,10 @@ const docTemplate = `{
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
 	Host:             "localhost:8080",
-	BasePath:         "/api/v1",
+	BasePath:         "",
 	Schemes:          []string{},
-	Title:            "Swagger Example API",
-	Description:      "This is a sample server Petstore server.",
+	Title:            "Online Songs-lib",
+	Description:      "This is a sample server Online Songs-lib server.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 }

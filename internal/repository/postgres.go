@@ -8,7 +8,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/jackc/pgx/v4/stdlib"
-	"log"
+	"github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,7 +35,7 @@ func NewPostgres(cfg Config) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database connection error: %w", err)
 	}
-	log.Printf("database is connected")
+	logrus.Printf("database is connected")
 
 	// Проверяем доступность базы данных
 	if err := dbPool.Ping(context.Background()); err != nil {
@@ -46,7 +46,7 @@ func NewPostgres(cfg Config) (*pgxpool.Pool, error) {
 	if err := runMigrations(dbPool); err != nil {
 		return nil, fmt.Errorf("migration execution error: %w", err)
 	}
-	log.Printf("migration is created")
+	logrus.Printf("migration is created")
 	return dbPool, nil
 }
 

@@ -23,7 +23,7 @@ migrate-up:
 
 # Цель для отката миграций
 migrate-down:
-	$(MIGRATE_CMD) -path $(MIGRATE_DIR) -database "$(DB_URL)" down -steps $(STEPS)
+	$(MIGRATE_CMD) -path $(MIGRATE_DIR) -database "$(DB_URL)" down $(STEPS)
 
 # Цель для отображения справки
 help:

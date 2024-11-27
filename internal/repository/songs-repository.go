@@ -2,12 +2,13 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/Ktuty/internal/models"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/sirupsen/logrus"
 	"strconv"
-	"time"
 )
 
 // Структура SongsRepository, которая инкапсулирует подключение к базе данных
@@ -20,77 +21,92 @@ func NewSongsRepository(db *pgxpool.Pool) *SongsRepository {
 	return &SongsRepository{db: db}
 }
 
-// Формат даты для парсинга и форматирования
-var FORMAT_DATE = "02.01.2006"
-
 // Метод для получения всех песен с фильтрацией, пагинацией и возвратом общего количества страниц
 func (r *SongsRepository) GetAllSongs(filter models.Songs, page, pageSize int) ([]models.Songs, int, error) {
-	// Получение ID групп по имени группы
-	groupIDs, err := r.getGroupIDsByName(filter.Group)
-	if err != nil {
-		return nil, 0, err
-	}
+	offset := (page - 1) * pageSize
 
-	// Построение SQL-запроса и аргументов
-	query, args := buildQuery(filter, page, pageSize, groupIDs)
+	query := `
+	SELECT s.id, s.song, g."group", s.text, s.release_date, s.link
+	FROM songs s
+	INNER JOIN groups g ON s.group_id = g.id
+	WHERE s.song ILIKE $1 AND g."group" ILIKE $2 AND s.text ILIKE $3 AND s.release_date ILIKE $4 AND s.link ILIKE $5
+	LIMIT $6 OFFSET $7`
 
-	// Выполнение запроса к базе данных
-	rows, err := r.db.Query(context.Background(), query, args...)
+	logrus.WithFields(logrus.Fields{
+		"query":  query,
+		"params": []interface{}{"%" + filter.Song + "%", "%" + filter.Group + "%", "%" + filter.Text + "%", "%" + filter.ReleaseDate + "%", "%" + filter.Link + "%", pageSize, offset},
+	}).Debug("Executing query")
+
+	rows, err := r.db.Query(context.Background(), query, "%"+filter.Song+"%", "%"+filter.Group+"%", "%"+filter.Text+"%", "%"+filter.ReleaseDate+"%", "%"+filter.Link+"%", pageSize, offset)
 	if err != nil {
-		return nil, 0, err
+		logrus.WithError(err).Error("SongsRepository.GetAllSongs query error")
+		return nil, 0, fmt.Errorf("SongsRepository.GetAllSongs query error: %w", err)
 	}
 	defer rows.Close()
 
-	// Сканирование строк и преобразование их в модели песен
-	songs, err := scanRows(rows, r)
-	if err != nil {
-		return nil, 0, err
+	var songs []models.Songs
+
+	for rows.Next() {
+		var song models.Songs
+		if err := rows.Scan(&song.ID, &song.Song, &song.Group, &song.Text, &song.ReleaseDate, &song.Link); err != nil {
+			logrus.WithError(err).Error("SongsRepository.GetAllSongs scan error")
+			return nil, 0, fmt.Errorf("SongsRepository.GetAllSongs scan error: %w", err)
+		}
+		songs = append(songs, song)
 	}
 
-	// Подсчет общего количества строк
-	totalRows, err := countRows(r.db, filter)
+	if err := rows.Err(); err != nil {
+		logrus.WithError(err).Error("SongsRepository.GetAllSongs rows error")
+		return nil, 0, fmt.Errorf("SongsRepository.GetAllSongs rows error: %w", err)
+	}
+
+	// Запрос для получения общего количества записей
+	countQuery := `
+	SELECT COUNT(*)
+	FROM songs s
+	INNER JOIN groups g ON s.group_id = g.id
+	WHERE s.song ILIKE $1 AND g."group" ILIKE $2 AND s.text ILIKE $3 AND s.release_date ILIKE $4 AND s.link ILIKE $5`
+
+	logrus.WithFields(logrus.Fields{
+		"query":  countQuery,
+		"params": []interface{}{"%" + filter.Song + "%", "%" + filter.Group + "%", "%" + filter.Text + "%", "%" + filter.ReleaseDate + "%", "%" + filter.Link + "%"},
+	}).Debug("Executing count query")
+
+	var totalRecords int
+	err = r.db.QueryRow(context.Background(), countQuery, "%"+filter.Song+"%", "%"+filter.Group+"%", "%"+filter.Text+"%", "%"+filter.ReleaseDate+"%", "%"+filter.Link+"%").Scan(&totalRecords)
 	if err != nil {
-		return nil, 0, err
+		logrus.WithError(err).Error("SongsRepository.GetAllSongs count query error")
+		return nil, 0, fmt.Errorf("SongsRepository.GetAllSongs count query error: %w", err)
 	}
 
 	// Вычисление общего количества страниц
-	totalPages := (totalRows + pageSize - 1) / pageSize
+	totalPages := (totalRecords + pageSize - 1) / pageSize
 	return songs, totalPages, nil
 }
 
 // Метод для получения песни по ID
 func (r *SongsRepository) GetSongByID(id int) (models.Songs, error) {
-	// Построение SQL-запроса и аргументов
-	var query string
-	var args []interface{}
-	query = `SELECT id, group_id, song, text, release_date, link FROM songs WHERE id = $1`
-	args = append(args, id)
+	// Построение SQL-запроса для получения песни
+	query := `SELECT s.id, g."group", s.song, s.text, s.release_date, s.link
+	          FROM songs s
+	          INNER JOIN groups g ON s.group_id = g.id
+	          WHERE s.id = $1`
+
+	logrus.WithFields(logrus.Fields{
+		"query":  query,
+		"params": id,
+	}).Debug("Executing query")
 
 	// Выполнение запроса к базе данных
-	rows, err := r.db.Query(context.Background(), query, args...)
-	if err != nil {
-		return models.Songs{}, err
-	}
-	defer rows.Close()
-
-	// Сканирование строки и преобразование её в модель песни
 	var song models.Songs
-	var releaseDate time.Time
-	var groupID int
-
-	if rows.Next() {
-		err := rows.Scan(&song.ID, &groupID, &song.Song, &song.Text, &releaseDate, &song.Link)
-		if err != nil {
-			return models.Songs{}, err
+	err := r.db.QueryRow(context.Background(), query, id).Scan(&song.ID, &song.Group, &song.Song, &song.Text, &song.ReleaseDate, &song.Link)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			logrus.WithField("id", id).Info("Song not found")
+			return models.Songs{}, fmt.Errorf("song with id %d not found", id)
 		}
-		song.Group = r.groupNameByID(groupID)
-		song.ReleaseDate = releaseDate.Format(FORMAT_DATE)
-	} else {
-		return models.Songs{}, fmt.Errorf("song with id %d not found", id)
-	}
-
-	if err := rows.Err(); err != nil {
-		return models.Songs{}, err
+		logrus.WithError(err).Error("SongsRepository.GetSongByID query error")
+		return models.Songs{}, fmt.Errorf("SongsRepository.GetSongByID query error: %w", err)
 	}
 
 	return song, nil
@@ -98,29 +114,48 @@ func (r *SongsRepository) GetSongByID(id int) (models.Songs, error) {
 
 // Метод для создания новой песни
 func (r *SongsRepository) PostSong(song models.Songs) error {
+
 	// Убедиться, что группа существует или создать её
 	groupID, err := r.ensureGroupExists(song.Group)
 	if err != nil {
+		logrus.WithError(err).Error("Error ensuring group exists")
 		return err
-	}
-
-	// Парсинг даты релиза
-	releaseDate, err := parseStrToTime(song.ReleaseDate)
-	if err != nil {
-		return fmt.Errorf("invalid release date format: %v", err)
 	}
 
 	// Построение SQL-запроса для вставки новой песни
 	query := `INSERT INTO songs (group_id, song, text, release_date, link) VALUES ($1, $2, $3, $4, $5)`
-	_, err = r.db.Exec(context.Background(), query, groupID, song.Song, song.Text, releaseDate, song.Link)
+	logrus.WithFields(logrus.Fields{
+		"query":  query,
+		"params": []interface{}{groupID, song.Song, song.Text, song.ReleaseDate, song.Link},
+	}).Debug("Executing query")
+
+	_, err = r.db.Exec(context.Background(), query, groupID, song.Song, song.Text, song.ReleaseDate, song.Link)
+	if err != nil {
+		logrus.WithError(err).Error("Error inserting song")
+	}
 	return err
 }
 
 // Метод для обновления песни по ID
 func (r *SongsRepository) UpdateSong(songID int, song models.Songs) error {
-	// Убедиться, что группа существует или создать её
-	groupID, err := r.ensureGroupExists(song.Group)
+
+	groupID, err := r.getGroupIDByName(songID)
 	if err != nil {
+		logrus.WithError(err).Error("Error getting group ID")
+		return err
+	}
+
+	if err = r.ensureGroupUsed(groupID, songID); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"songID": songID,
+			"error":  err,
+		}).Error("Error checking group_id for song")
+	}
+
+	// Убедиться, что группа существует или создать её
+	groupID, err = r.ensureGroupExists(song.Group)
+	if err != nil {
+		logrus.WithError(err).Error("Error ensuring group exists")
 		return err
 	}
 
@@ -151,15 +186,11 @@ func (r *SongsRepository) UpdateSong(songID int, song models.Songs) error {
 		argIndex++
 	}
 	if song.ReleaseDate != "" {
-		releaseDate, err := parseStrToTime(song.ReleaseDate)
-		if err != nil {
-			return fmt.Errorf("invalid release date format: %v", err)
-		}
 		if len(args) > 0 {
 			query += `, `
 		}
 		query += `release_date = $` + strconv.Itoa(argIndex)
-		args = append(args, releaseDate)
+		args = append(args, song.ReleaseDate)
 		argIndex++
 	}
 	if song.Link != "" {
@@ -174,8 +205,17 @@ func (r *SongsRepository) UpdateSong(songID int, song models.Songs) error {
 	query += ` WHERE id = $1`
 	args = append([]interface{}{songID}, args...)
 
+	logrus.WithFields(logrus.Fields{
+		"query":  query,
+		"params": args,
+	}).Debug("Executing query")
+
 	_, err = r.db.Exec(context.Background(), query, args...)
 	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"songID": songID,
+			"error":  err,
+		}).Error("Error updating song")
 		return fmt.Errorf("invalid update id: %v data: %v", songID, err)
 	}
 
@@ -185,34 +225,32 @@ func (r *SongsRepository) UpdateSong(songID int, song models.Songs) error {
 // Метод для удаления песни по ID
 func (r *SongsRepository) DeleteSong(songID int) error {
 	// Получение group_id для песни
-	var groupID int
-	query := `SELECT group_id FROM songs WHERE id = $1`
-	err := r.db.QueryRow(context.Background(), query, songID).Scan(&groupID)
+	groupID, err := r.getGroupIDByName(songID)
 	if err != nil {
-		return fmt.Errorf("error getting group_id for song id %d: %v", songID, err)
+		logrus.WithError(err).Error("Error getting group ID")
+		return err
 	}
 
-	// Подсчет количества песен в группе
-	var count int
-	query = `SELECT COUNT(*) FROM songs WHERE group_id = $1 AND id <> $2`
-	err = r.db.QueryRow(context.Background(), query, groupID, songID).Scan(&count)
-	if err != nil {
-		return fmt.Errorf("error counting songs for group_id %d: %v", groupID, err)
-	}
-
-	// Удаление группы, если она больше не используется
-	if count == 0 {
-		query = `DELETE FROM groups WHERE id = $1`
-		_, err = r.db.Exec(context.Background(), query, groupID)
-		if err != nil {
-			return fmt.Errorf("error deleting group with id %d: %v", groupID, err)
-		}
+	if err = r.ensureGroupUsed(groupID, songID); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"songID": songID,
+			"error":  err,
+		}).Error("Error checking group_id for song")
 	}
 
 	// Удаление песни
-	query = `DELETE FROM songs WHERE id = $1`
+	query := `DELETE FROM songs WHERE id = $1`
+	logrus.WithFields(logrus.Fields{
+		"query":  query,
+		"params": songID,
+	}).Debug("Executing query")
+
 	_, err = r.db.Exec(context.Background(), query, songID)
 	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"songID": songID,
+			"error":  err,
+		}).Error("Error deleting song")
 		return fmt.Errorf("error deleting song with id %d: %v", songID, err)
 	}
 
@@ -227,169 +265,90 @@ func (r *SongsRepository) ensureGroupExists(groupName string) (int, error) {
 
 	// Построение SQL-запроса для поиска группы
 	query := `SELECT id FROM groups WHERE "group" ILIKE '%' || $1 || '%' LIMIT 1`
+	logrus.WithFields(logrus.Fields{
+		"query":  query,
+		"params": groupName,
+	}).Debug("Executing query")
+
 	var groupID int
 	err := r.db.QueryRow(context.Background(), query, groupName).Scan(&groupID)
 	if err == pgx.ErrNoRows {
 		// Группа не существует, создать её
 		insertQuery := `INSERT INTO groups ("group") VALUES ($1) RETURNING id`
+		logrus.WithFields(logrus.Fields{
+			"query":  insertQuery,
+			"params": groupName,
+		}).Debug("Executing query")
+
 		err := r.db.QueryRow(context.Background(), insertQuery, groupName).Scan(&groupID)
 		if err != nil {
+			logrus.WithError(err).Error("Error inserting group")
 			return 0, fmt.Errorf("error inserting group: %v", err)
 		}
 		return groupID, nil
 	} else if err != nil {
+		logrus.WithError(err).Error("Error querying group")
 		return 0, fmt.Errorf("error querying group: %v", err)
 	}
 	return groupID, nil
 }
 
-// Метод для получения ID групп по имени группы
-func (r *SongsRepository) getGroupIDsByName(groupName string) ([]int, error) {
-	if groupName == "" {
-		return nil, nil
-	}
+func (r *SongsRepository) ensureGroupUsed(groupID, songID int) error {
+	// Подсчет количества песен в группе
+	var count int
+	query := `SELECT COUNT(*) FROM songs WHERE group_id = $1 AND id <> $2`
+	logrus.WithFields(logrus.Fields{
+		"query":  query,
+		"params": []interface{}{groupID, songID},
+	}).Debug("Executing query")
 
-	// Построение SQL-запроса для поиска групп
-	query := `SELECT id FROM groups WHERE "group" ILIKE '%' || $1 || '%'`
-	rows, err := r.db.Query(context.Background(), query, groupName)
+	err := r.db.QueryRow(context.Background(), query, groupID, songID).Scan(&count)
 	if err != nil {
-		return nil, fmt.Errorf("error querying groups: %v", err)
+		logrus.WithFields(logrus.Fields{
+			"groupID": groupID,
+			"error":   err,
+		}).Error("Error counting songs for group")
+		return fmt.Errorf("error counting songs for group_id %d: %v", groupID, err)
 	}
-	defer rows.Close()
 
-	var groupIDs []int
-	for rows.Next() {
-		var groupID int
-		err := rows.Scan(&groupID)
+	// Удаление группы, если она больше не используется
+	if count == 0 {
+		query = `DELETE FROM groups WHERE id = $1`
+		logrus.WithFields(logrus.Fields{
+			"query":  query,
+			"params": groupID,
+		}).Debug("Executing query")
+
+		_, err = r.db.Exec(context.Background(), query, groupID)
 		if err != nil {
-			return nil, fmt.Errorf("error scanning group ID: %v", err)
+			logrus.WithFields(logrus.Fields{
+				"groupID": groupID,
+				"error":   err,
+			}).Error("Error deleting group")
+			return fmt.Errorf("error deleting group with id %d: %v", groupID, err)
 		}
-		groupIDs = append(groupIDs, groupID)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error scanning group IDs: %v", err)
-	}
-
-	return groupIDs, nil
+	return nil
 }
 
-// Метод для получения имени группы по ID
-func (r *SongsRepository) groupNameByID(ID int) string {
-	var groupName string
-	query := `SELECT "group" FROM groups WHERE id = $1`
-	err := r.db.QueryRow(context.Background(), query, ID).Scan(&groupName)
+func (r *SongsRepository) getGroupIDByName(songID int) (int, error) {
+	var groupID int
+
+	query := `SELECT group_id FROM songs WHERE id = $1`
+	logrus.WithFields(logrus.Fields{
+		"query":  query,
+		"params": songID,
+	}).Debug("Executing query")
+
+	err := r.db.QueryRow(context.Background(), query, songID).Scan(&groupID)
 	if err != nil {
-		return ""
+		logrus.WithFields(logrus.Fields{
+			"songID": songID,
+			"error":  err,
+		}).Error("Error getting group_id for song")
+		return 0, fmt.Errorf("error getting group_id for song id %d: %v", songID, err)
 	}
 
-	return groupName
-}
-
-// Функция для парсинга строки в время
-func parseStrToTime(strTime string) (releaseDate time.Time, err error) {
-	if strTime == "" {
-		return time.Now(), nil
-	}
-
-	releaseDate, err = time.Parse(FORMAT_DATE, strTime)
-	if err != nil {
-		return releaseDate, err
-	}
-
-	return releaseDate, nil
-}
-
-// Функция для построения SQL-запроса с фильтрацией, пагинацией и аргументами
-func buildQuery(filter models.Songs, page, pageSize int, groupIDs []int) (string, []interface{}) {
-	query := `SELECT id, group_id, song, text, release_date, link FROM songs WHERE 1=1`
-	args := []interface{}{}
-
-	query, args = appendFilter(query, args, filter, groupIDs)
-
-	query += ` LIMIT $` + strconv.Itoa(len(args)+1) + ` OFFSET $` + strconv.Itoa(len(args)+2)
-	offset := (page - 1) * pageSize
-
-	args = append(args, pageSize, offset)
-	return query, args
-}
-
-// Функция для добавления фильтров к SQL-запросу
-func appendFilter(query string, args []interface{}, filter models.Songs, groupIDs []int) (string, []interface{}) {
-	argIndex := 1
-	if filter.Song != "" {
-		query += ` AND song ILIKE $` + strconv.Itoa(argIndex)
-		args = append(args, "%"+filter.Song+"%")
-		argIndex++
-	}
-	if len(groupIDs) > 0 {
-		query += ` AND group_id = ANY($` + strconv.Itoa(argIndex) + `)`
-		args = append(args, groupIDs)
-		argIndex++
-	}
-	if filter.Text != "" {
-		query += ` AND text ILIKE $` + strconv.Itoa(argIndex)
-		args = append(args, "%"+filter.Text+"%")
-		argIndex++
-	}
-	if filter.ReleaseDate != "" {
-		releaseDate, err := parseStrToTime(filter.ReleaseDate)
-		if err != nil {
-			return "", nil
-		}
-		query += ` AND release_date = $` + strconv.Itoa(argIndex)
-		args = append(args, releaseDate)
-		argIndex++
-	}
-	if filter.Link != "" {
-		query += ` AND link ILIKE $` + strconv.Itoa(argIndex)
-		args = append(args, "%"+filter.Link+"%")
-		argIndex++
-	}
-	return query, args
-}
-
-// Функция для сканирования строк и преобразования их в модели песен
-func scanRows(rows pgx.Rows, r *SongsRepository) ([]models.Songs, error) {
-	var songs []models.Songs
-
-	for rows.Next() {
-		var song models.Songs
-		var groupID int
-		var releaseDate time.Time
-		err := rows.Scan(&song.ID, &groupID, &song.Song, &song.Text, &releaseDate, &song.Link)
-		if err != nil {
-			return nil, err
-		}
-		song.Group = r.groupNameByID(groupID)
-		song.ReleaseDate = releaseDate.Format(FORMAT_DATE)
-		songs = append(songs, song)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return songs, nil
-}
-
-// Функция для подсчета общего количества строк
-func countRows(db *pgxpool.Pool, filter models.Songs) (int, error) {
-	query, args := buildCountQuery(filter)
-	var totalRows int
-	err := db.QueryRow(context.Background(), query, args...).Scan(&totalRows)
-	if err != nil {
-		return 0, err
-	}
-	return totalRows, nil
-}
-
-// Функция для построения SQL-запроса для подсчета строк
-func buildCountQuery(filter models.Songs) (string, []interface{}) {
-	query := `SELECT COUNT(*) FROM songs WHERE 1=1`
-	args := []interface{}{}
-
-	query, args = appendFilter(query, args, filter, nil)
-
-	return query, args
+	return groupID, nil
 }

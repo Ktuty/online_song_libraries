@@ -1,5 +1,11 @@
-basePath: /api/v1
 definitions:
+  models.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+    type: object
   models.Songs:
     properties:
       group:
@@ -17,16 +23,10 @@ definitions:
     type: object
 host: localhost:8080
 info:
-  contact:
-    email: support@swagger.io
-    name: API Support
-    url: http://www.swagger.io/support
-  description: This is a sample server Petstore server.
-  license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  contact: {}
+  description: This is a sample server Online Songs-lib server.
   termsOfService: http://swagger.io/terms/
-  title: Swagger Example API
+  title: Online Songs-lib
   version: "1.0"
 paths:
   /songs:
@@ -72,13 +72,22 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Songs'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
       summary: Get all songs
       tags:
       - songs
     post:
       consumes:
       - application/json
-      description: Create a new song
+      description: Create a new song by sending a request to an external API and then
+        saving the song details.
       parameters:
       - description: Song details
         in: body
@@ -91,6 +100,14 @@ paths:
       responses:
         "201":
           description: Created
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
       summary: Create a new song
       tags:
       - songs
@@ -110,6 +127,14 @@ paths:
       responses:
         "200":
           description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
       summary: Delete a song
       tags:
       - songs
@@ -135,6 +160,14 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Songs'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
       summary: Get a song by ID
       tags:
       - songs
@@ -159,6 +192,14 @@ paths:
       responses:
         "200":
           description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
       summary: Update a song
       tags:
       - songs
