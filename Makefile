@@ -23,11 +23,11 @@ migrate-up:
 
 # Цель для отката миграций
 migrate-down:
-	$(MIGRATE_CMD) -path $(MIGRATE_DIR) -database "$(DB_URL)" down
+	$(MIGRATE_CMD) -path $(MIGRATE_DIR) -database "$(DB_URL)" down -steps $(STEPS)
 
 # Цель для отображения справки
 help:
 	@echo "Usage:"
 	@echo "  make create-migration MIGRATION_NAME=<name>"
 	@echo "  make migrate-up"
-	@echo "  make migrate-down"
+	@echo "  make migrate-down STEPS=<number>"
