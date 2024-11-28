@@ -21,9 +21,7 @@ import (
 //	@title			Online Songs-lib
 //	@version		1.0
 //	@description	This is a sample server Online Songs-lib server.
-//	@termsOfService	http://swagger.io/terms/
-
-//	@host	localhost:8080
+//	@host			localhost:8080
 
 func main() {
 	// Загрузка переменных окружения из файла .env

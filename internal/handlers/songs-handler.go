@@ -85,7 +85,7 @@ func (h *Handler) Songs(w http.ResponseWriter, r *http.Request) {
 //	@Tags			songs
 //	@Accept			json
 //	@Produce		json
-//	@Param			song	body	models.Songs	true	"Song details"
+//	@Param			song	body	models.Params	true	"Song details"
 //	@Success		201
 //	@Failure		400	{object}	models.ErrorResponse
 //	@Failure		500	{object}	models.ErrorResponse
@@ -163,6 +163,7 @@ func (h *Handler) NewSong(w http.ResponseWriter, r *http.Request) {
 //	@Param			vers	query		int	false	"Verse number"	default(0)
 //	@Success		200		{object}	models.Songs
 //	@Failure		400		{object}	models.ErrorResponse
+//	@Failure		404		{object}	models.ErrorResponse
 //	@Failure		500		{object}	models.ErrorResponse
 //	@Router			/songs/{id} [get]
 func (h *Handler) SongByID(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +196,7 @@ func (h *Handler) SongByID(w http.ResponseWriter, r *http.Request) {
 		verse, err := splitTextDoubleMargins(song.Text, vers-1)
 		if err != nil {
 			logrus.WithError(err).Error("Ошибка при разделении текста на куплеты")
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 

@@ -139,21 +139,14 @@ func (r *SongsRepository) PostSong(song models.Songs) error {
 // Метод для обновления песни по ID
 func (r *SongsRepository) UpdateSong(songID int, song models.Songs) error {
 
-	groupID, err := r.getGroupIDByName(songID)
+	currentGroupID, err := r.getGroupIDByName(songID)
 	if err != nil {
 		logrus.WithError(err).Error("Error getting group ID")
 		return err
 	}
 
-	if err = r.ensureGroupUsed(groupID, songID); err != nil {
-		logrus.WithFields(logrus.Fields{
-			"songID": songID,
-			"error":  err,
-		}).Error("Error checking group_id for song")
-	}
-
 	// Убедиться, что группа существует или создать её
-	groupID, err = r.ensureGroupExists(song.Group)
+	groupID, err := r.ensureGroupExists(song.Group)
 	if err != nil {
 		logrus.WithError(err).Error("Error ensuring group exists")
 		return err
@@ -217,6 +210,15 @@ func (r *SongsRepository) UpdateSong(songID int, song models.Songs) error {
 			"error":  err,
 		}).Error("Error updating song")
 		return fmt.Errorf("invalid update id: %v data: %v", songID, err)
+	}
+
+	if currentGroupID != groupID {
+		if err = r.ensureGroupUsed(currentGroupID, songID); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"songID": songID,
+				"error":  err,
+			}).Error("Error checking group_id for song")
+		}
 	}
 
 	return nil

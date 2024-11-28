@@ -3,7 +3,6 @@
     "info": {
         "description": "This is a sample server Online Songs-lib server.",
         "title": "Online Songs-lib",
-        "termsOfService": "http://swagger.io/terms/",
         "contact": {},
         "version": "1.0"
     },
@@ -108,7 +107,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.Songs"
+                            "$ref": "#/definitions/models.Params"
                         }
                     }
                 ],
@@ -169,6 +168,12 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
                         }
@@ -278,6 +283,17 @@
                     "type": "integer"
                 },
                 "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.Params": {
+            "type": "object",
+            "properties": {
+                "group": {
+                    "type": "string"
+                },
+                "song": {
                     "type": "string"
                 }
             }

@@ -6,6 +6,13 @@ definitions:
       message:
         type: string
     type: object
+  models.Params:
+    properties:
+      group:
+        type: string
+      song:
+        type: string
+    type: object
   models.Songs:
     properties:
       group:
@@ -25,7 +32,6 @@ host: localhost:8080
 info:
   contact: {}
   description: This is a sample server Online Songs-lib server.
-  termsOfService: http://swagger.io/terms/
   title: Online Songs-lib
   version: "1.0"
 paths:
@@ -94,7 +100,7 @@ paths:
         name: song
         required: true
         schema:
-          $ref: '#/definitions/models.Songs'
+          $ref: '#/definitions/models.Params'
       produces:
       - application/json
       responses:
@@ -162,6 +168,10 @@ paths:
             $ref: '#/definitions/models.Songs'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/models.ErrorResponse'
         "500":
